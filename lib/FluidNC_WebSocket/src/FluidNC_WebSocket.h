@@ -37,6 +37,7 @@ class FluidNC_WS
 
         bool connect(void);
         bool connect(const char* host, uint16_t port);
+        bool disconnect(void);
         bool isConnected();
         int activeID();
         void cmd( SafeString &command, SafeString &reply );
@@ -71,9 +72,11 @@ class FluidNC_WS
         float mX();
         float mY();
         float mZ();
+        float mA();
         float wX();
         float wY();
         float wZ();
+        float wA();
 
         float reportedSpindleSpeed();
         void  set_reportedSpindleSpeed(float newSpeed);

@@ -1,6 +1,6 @@
 void _convertPos(bool isM, SafeString& s) {
-  int x_idx, y_idx, z_idx;
-  float x, y, z;
+  int x_idx, y_idx, z_idx, e_idx, a_idx;
+  float x, y, z, a;
   
   cSF(sx,8);
   x_idx = s.indexOf(',');
@@ -17,18 +17,40 @@ void _convertPos(bool isM, SafeString& s) {
   s.remove(0, y_idx+1);
 
   cSF(sz,8);
-  z_idx = s.indexOf('|');
-  if (z_idx < 0) {z_idx = s.indexOf('>');}
+  z_idx = s.indexOf(',');
+  e_idx = s.indexOf('|');
+  if (e_idx < 0) {
+    e_idx = s.indexOf('>');
+  }
+  if (z_idx < 0 && e_idx > 0) {
+    z_idx = e_idx;
+  }
   s.substring(sz, 0, z_idx);
   sz.toFloat(z);
+  s.remove(0, z_idx+1);
+
+  cSF(sa,8);
+  a_idx = s.indexOf(',');
+  e_idx = s.indexOf('|');
+  if (e_idx < 0) {
+    e_idx = s.indexOf('>');
+  }
+  if (a_idx < 0 && e_idx > 0) {
+    a_idx = e_idx;
+  }
+  s.substring(sa, 0, a_idx);
+  sz.toFloat(a);
+  s.remove(0, a_idx+1);
   if (isM) {
     _mX = x;
     _mY = y;
     _mZ = z;
+    _mA = a;
   } else {
     _wX = x;
     _wY = y;
     _wZ = z;
+    _wA = a;
   }
 }
 
@@ -64,15 +86,18 @@ void _convertOverride(SafeString& s) {
 void _getGrblState(bool full, const void *mem, uint32_t len)
 {
     //DEBUG_SERIAL.printf("[_FluidNC_WS::_getGrblState] Reply length: %d\n", len );
- 
     uint32_t max_len = len;
     if (max_len>MAX_LEN-1) max_len=MAX_LEN-1;
     createSafeString(grblState, max_len);
     get_payload(mem, len, grblState);
 
     //DEBUG_SERIAL.println(grblState);
-    //DEBUG_SERIAL.printf("charAt(1): %c\n", grblState.charAt(1));
-
+    //DEBUG_SERIAL.printf("charAt(1): %c %c\n", grblState.charAt(0), grblState.charAt(1));
+    if (grblState.charAt(0) == '[') {
+      return; //Message/debug types
+    }
+    //Ignore anything not in a status report
+    if (grblState.charAt(0) != '<') return;
     if (grblState.charAt(1) == 'J') _mState = Jog;
         else if (grblState.charAt(3) == 'm') _mState = Home;
         else if (grblState.charAt(4) == 'd') _mState = Hold;

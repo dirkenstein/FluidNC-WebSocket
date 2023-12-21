@@ -20,6 +20,7 @@ WebSocketsClient webSocket;
 ESP32Timer ITimer(0);
 
 volatile bool webSocket_connected = false;
+volatile bool timer_attached = false;
 volatile bool isProcessingDone = false;
 volatile FluidNC_WS_API myCMD = None;
 const char *fluidnc_host_default = "fluidnc.local";
@@ -38,8 +39,8 @@ bool _spindleOn;
 volatile float _ovRapid;
 volatile float _ovFeed;
 int _ovSpeed;
-double _mX, _mY, _mZ; // Machine position
-double _wX, _wY, _wZ; // Work positions
+double _mX, _mY, _mZ, _mA; // Machine position
+double _wX, _wY, _wZ, _wA; // Work positions
 
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length);
 bool isConnected_internal(void);
@@ -70,18 +71,26 @@ bool FluidNC_WS::connect(const char* host, uint16_t port)
 	DEBUG_SERIAL.printf("[FluidNC_WS::connect] CPU Frequency = %d MHz\n",F_CPU / 1000000);
 
     // Interval in microsecs
-	if (ITimer.attachInterruptInterval(TIMER_TIMEOUT_INTERVAL_MS * 1000, TimerHandler))
-	{
+       if (!timer_attached)
+       {
+	  if (ITimer.attachInterruptInterval(TIMER_TIMEOUT_INTERVAL_MS * 1000, TimerHandler))
+	  {
 		DEBUG_SERIAL.printf("[FluidNC_WS::connect] Starting  ITimer OK, millis() = %d\n", millis());
-	}
-	else
+		timer_attached = true;
+	  }
+	  else
+          {
 		DEBUG_SERIAL.println("[FluidNC_WS::connect] Can't set ITimer. Select another freq. or timer");
+		timer_attached = false;
+          }
+       }
+
+    // event handler
+    webSocket.onEvent(webSocketEvent);
 
     // server address, port and URL
     webSocket.begin(host, port, "/");
  
-    // event handler
-    webSocket.onEvent(webSocketEvent);
 
     bool retVal = false;
     if (! isConnected_internal() )
@@ -95,6 +104,16 @@ bool FluidNC_WS::connect(const char* host, uint16_t port)
     }
 
     return retVal;
+}
+
+bool FluidNC_WS::disconnect()
+{
+  if (_isConnected)
+  {
+    webSocket.disconnect();
+    return true;
+  }
+  return  false;
 }
 
 bool FluidNC_WS::isConnected()
@@ -111,9 +130,11 @@ void FluidNC_WS::set_mState(machinestate newState) {_mState = newState;}
 float FluidNC_WS::mX() {return _mX;}
 float FluidNC_WS::mY() {return _mY;}
 float FluidNC_WS::mZ() {return _mZ;}
+float FluidNC_WS::mA() {return _mA;}
 float FluidNC_WS::wX() {return _wX;}
 float FluidNC_WS::wY() {return _wY;}
 float FluidNC_WS::wZ() {return _wZ;}
+float FluidNC_WS::wA() {return _wA;}
 float FluidNC_WS::reportedSpindleSpeed() {return _reportedSpindleSpeed;}
 void  FluidNC_WS::set_reportedSpindleSpeed(float newSpeed) {_reportedSpindleSpeed=newSpeed;}
 float FluidNC_WS::isSpindleOn() {return _spindleOn;}
@@ -123,7 +144,7 @@ int FluidNC_WS::ovRapid() {return _ovRapid;}
 
 bool isConnected_internal()
 {
-    unsigned long millisCheckInterval = 200;
+    unsigned long millisCheckInterval = 1;
     unsigned long lastUpdate = millis();
 
     TimerCount=0;
@@ -136,8 +157,10 @@ bool isConnected_internal()
         }
     }
     if (TimerCount>0)
+    {
         DEBUG_SERIAL.printf("[FluidNC_WS::isConnected_internal] Timed out. TimerCount=%d\n", TimerCount);
-    
+        webSocket.disconnect();
+    } 
     return _isConnected;
 }
 
@@ -191,7 +214,7 @@ void FluidNC_WS::cmd( SafeString &command, SafeString &reply )
 
 void cmd_internal( SafeString &command )
 {
-    unsigned long millisCheckInterval = 500;
+    unsigned long millisCheckInterval = 1;
     unsigned long lastUpdate = millis();
 
     if (webSocket_connected)
@@ -257,8 +280,8 @@ void FluidNC_WS::SoftReset() {this->fluidCMD(18);}
 void FluidNC_WS::StatusQuery() {this->fluidCMD((const char *)"?");}
 void FluidNC_WS::FeedHold() {this->fluidCMD((const char *)"!");}
 void FluidNC_WS::CycleStartResume() {this->fluidCMD((const char *)"~");}
-void FluidNC_WS::SafetyDoor() {this->fluidCMD(84);}
-void FluidNC_WS::JogCancel() {this->fluidCMD(85);}
+void FluidNC_WS::SafetyDoor() {this->fluidCMD(0x84);}
+void FluidNC_WS::JogCancel() {this->fluidCMD(0x85);}
 void FluidNC_WS::Unlock(bool async) {}
 void FluidNC_WS::Unlock() {this->fluidCMD((const char *)"$X");}
 void FluidNC_WS::Home(bool async) {}
